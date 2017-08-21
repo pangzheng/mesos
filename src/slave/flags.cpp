@@ -532,6 +532,16 @@ mesos::internal::slave::Flags::Flags()
       "(e.g., `3days`, `2weeks`, etc).\n",
       DOCKER_REMOVE_DELAY);
 
+  add(&Flags::docker_remove_backoff_factor,
+      "docker_remove_backoff_factor",
+      "Agent initially waits for a duration of `b`, where\n"
+      "`b = docker_remove_backoff_factor`, before retrying to remove docker\n"
+      "containers after it fails to do so during recovery. Subsequent retries\n"
+      "are exponentially backed off based on this interval (e.g., 2nd retry\n"
+      "after a duration of `b * 2^1`, 3rd retry after `b * 2^2`, etc) up to a\n"
+      "maximum of " + stringify(DOCKER_REMOVE_RETRY_INTERVAL_MAX),
+      DEFAULT_DOCKER_REMOVE_BACKOFF_FACTOR);
+
   add(&Flags::docker_kill_orphans,
       "docker_kill_orphans",
       "Enable docker containerizer to kill orphaned containers.\n"

@@ -168,8 +168,7 @@ public:
   // 'docker kill CONTAINER'.
   virtual process::Future<Nothing> stop(
       const std::string& containerName,
-      const Duration& timeout = Seconds(0),
-      bool remove = false) const;
+      const Duration& timeout = Seconds(0)) const;
 
   // Performs 'docker kill --signal=<signal> CONTAINER'.
   virtual process::Future<Nothing> kill(
@@ -222,13 +221,6 @@ private:
 
   static process::Future<Version> __version(
       const process::Future<std::string>& output);
-
-  static process::Future<Nothing> _stop(
-      const Docker& docker,
-      const std::string& containerName,
-      const std::string& cmd,
-      const process::Subprocess& s,
-      bool remove);
 
   static void _inspect(
       const std::string& cmd,

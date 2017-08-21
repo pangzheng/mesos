@@ -845,8 +845,7 @@ Future<Option<int>> Docker::run(
 
 Future<Nothing> Docker::stop(
     const string& containerName,
-    const Duration& timeout,
-    bool remove) const
+    const Duration& timeout) const
 {
   int timeoutSecs = (int) timeout.secs();
   if (timeoutSecs < 0) {
@@ -869,31 +868,7 @@ Future<Nothing> Docker::stop(
     return Failure("Failed to create subprocess '" + cmd + "': " + s.error());
   }
 
-  return s.get().status()
-    .then(lambda::bind(
-        &Docker::_stop,
-        *this,
-        containerName,
-        cmd,
-        s.get(),
-        remove));
-}
-
-Future<Nothing> Docker::_stop(
-    const Docker& docker,
-    const string& containerName,
-    const string& cmd,
-    const Subprocess& s,
-    bool remove)
-{
-  Option<int> status = s.status().get();
-
-  if (remove) {
-    bool force = !status.isSome() || status.get() != 0;
-    return docker.rm(containerName, force);
-  }
-
-  return checkError(cmd, s);
+  return checkError(cmd, s.get());
 }
 
 

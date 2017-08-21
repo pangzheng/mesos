@@ -14,6 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
 #include <list>
 #include <map>
 #include <string>
@@ -21,11 +22,13 @@
 
 #include <mesos/slave/container_logger.hpp>
 
+#include <process/after.hpp>
 #include <process/check.hpp>
 #include <process/collect.hpp>
 #include <process/defer.hpp>
 #include <process/delay.hpp>
 #include <process/io.hpp>
+#include <process/loop.hpp>
 #include <process/owned.hpp>
 #include <process/reap.hpp>
 #include <process/subprocess.hpp>
@@ -63,6 +66,7 @@
 
 using std::list;
 using std::map;
+using std::min
 using std::string;
 using std::vector;
 
@@ -941,7 +945,6 @@ Future<Nothing> DockerContainerizerProcess::_recover(
 Future<Nothing> DockerContainerizerProcess::__recover(
     const list<Docker::Container>& _containers)
 {
-  list<ContainerID> containerIds;
   list<Future<Nothing>> futures;
   foreach (const Docker::Container& container, _containers) {
     VLOG(1) << "Checking if Docker container named '"
@@ -965,27 +968,62 @@ Future<Nothing> DockerContainerizerProcess::__recover(
       // a containerizer responsibility; it is the responsibility of the agent
       // in co-operation with the executor. Once `destroy()` is called, the
       // container should be destroyed forcefully.
+      const ContainerID& containerId = id.get(); // ID used by Mesos
+      const string& dockerId = container.id;     // ID used by Docker
+
+      // NOTE: A known issue in Docker 1.12/1.13 sometimes leaks its mount
+      // namespace, causing `docker rm` to fail. As a workaround, we do a
+      // best-effort `docker rm` and log the error insteaf of failing the
+      // recovery process, then schedule retries with an exponential
+      // backoff (MESOS-7777).
+      auto retryLoop = [=](const Future<Nothing>& future) -> Future<Nothing> {
+
+          LOG(ERROR) << "Unable to remove Docker container '"
+                     << dockerId << "': " << future.failure();
+
+          Duration backoff = flags.docker_remove_backoff_factor;
+          loop(self(),
+              [=]() mutable -> Future<Nothing> {
+                auto retry = after(backoff);
+                backoff = min(backoff * 2, DOCKER_REMOVE_RETRY_INTERVAL_MAX);
+                return retry;
+              },
+              [=](Nothing) {
+                return docker->rm(dockerId, true)
+                  .then([=]() -> Future<ControlFlow<Nothing>> {
+                    LOG(INFO) << "Successfully removed Docker container '"
+                              << dockerId << "'";
+                    return Break();
+                  })
+                  .repair([=](
+                    const Future<ControlFlow<Nothing>>& future) {
+	    	    LOG(ERROR) << "Unable to remove Docker container '"
+	               	       << dockerId << "': " << future.failure();
+		    return Continue();
+	          });
+	      });
+	    return Nothing();
+      };
+
       futures.push_back(
-          docker->stop(
-              container.id,
-              flags.docker_stop_timeout,
-              true));
-      containerIds.push_back(id.get());
+	docker->stop(dockerId, flags.docker_stop_timeout)
+	  .repair([](const Future<Nothing>&) { return Nothing(); })
+	  .then([=] { return docker->rm(dockerId, true); })
+	  .repair(retryLoop)
+    	  .then(defer(self(), [=]() -> Future<Nothing> {
+            Try<Nothing> unmount = unmountPersistentVolumes(containerId);
+            if (unmount.isError()) {
+              return Failure(
+		   "Unable to unmount volumes for Docker container '" +
+                   containerId.value() + "': " + unmount.error());
+            }
+
+            return Nothing();
+      })));
     }
   }
 
-  return collect(futures)
-    .then(defer(self(), [=]() -> Future<Nothing> {
-      foreach (const ContainerID& containerId, containerIds) {
-        Try<Nothing> unmount = unmountPersistentVolumes(containerId);
-        if (unmount.isError()) {
-          return Failure("Unable to unmount volumes for Docker container '" +
-                         containerId.value() + "': " + unmount.error());
-        }
-      }
-
-      return Nothing();
-    }));
+  return collect(futures).then([] { return Nothing(); });
 }
 
 

@@ -1,4 +1,4 @@
-// Licensed to the Apache Software Foundation (ASF) under one
+ Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
 // regarding copyright ownership.  The ASF licenses this file
@@ -109,6 +109,7 @@ public:
   std::string docker;
   Option<std::string> docker_mesos_image;
   Duration docker_remove_delay;
+  Duration docker_remove_backoff_factor;
   std::string sandbox_directory;
   Option<ContainerInfo> default_container_info;
 

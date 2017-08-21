@@ -100,6 +100,14 @@ constexpr uint16_t DEFAULT_EPHEMERAL_PORTS_PER_CONTAINER = 1024;
 // Default duration that docker containers will be removed after exit.
 constexpr Duration DOCKER_REMOVE_DELAY = Hours(6);
 
+// Default backoff interval the agent waits before retrying to remove
+// docker containers after it fails to do so during recovery.
+constexpr Duration DEFAULT_DOCKER_REMOVE_BACKOFF_FACTOR = Minutes(1);
+
+// The maximum interval the agent waits before retrying to remove
+// docker containers.
+constexpr Duration DOCKER_REMOVE_RETRY_INTERVAL_MAX = Hours(6);
+
 // Default duration to wait before retry inspecting a docker
 // container.
 constexpr Duration DOCKER_INSPECT_DELAY = Seconds(1);
